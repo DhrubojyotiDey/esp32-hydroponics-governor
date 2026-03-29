@@ -3,93 +3,213 @@
 
 #include <Arduino.h>
 
-// ============================================================
-//  SENSOR TRAY
-//  A single shared snapshot of the latest sensor state.
-//  Producers call updateX() to drop new readings in.
-//  Viewers call getSensorJSON() to read the latest state.
-//
-//  When a producer writes, it directly notifies pushTaskHandle
-//  via xTaskNotifyGive() — no polling, no dirty flag needed.
-// ============================================================
-
-// Forward declaration — defined in the .ino
 extern TaskHandle_t pushTaskHandle;
 
-struct SensorState {
-  // --- DHT11 ---
-  float    temp;
-  float    hum;
-  uint32_t ts_dht;
-  bool     valid_dht;
+// Defined in .ino — routes to Serial + Telnet via log queue
+extern void enqueueLog(const char* msg);
 
-  // --- YF-S201 Flow ---
-  float    flow;
-  uint32_t ts_flow;
-  bool     valid_flow;
+// ============================================================
+// CONFIG
+// ============================================================
+#define MAX_SENSORS 10
+
+// ============================================================
+// SENSOR META (HEALTH TRACKING)
+// ============================================================
+struct SensorMeta {
+  const char* name;
+  uint32_t    timeout;
+  uint32_t    lastSeen;
+
+  bool        active;
+  bool        alive;
+  bool        prevAlive;
 };
 
-// --- Globals ---
+// ============================================================
+// SENSOR DATA (TRAY)
+// ============================================================
+struct SensorState {
+  float temp;
+  float hum;
+  float flow;
+};
+
+// ============================================================
+// GLOBALS
+// ============================================================
+SensorMeta        sensors[MAX_SENSORS];
+uint8_t           sensorCount = 0;
+
 SensorState       tray;
 SemaphoreHandle_t trayMutex;
 
-// --- Init ---
+// ============================================================
+// INIT
+// ============================================================
 void initSensorManager() {
   trayMutex = xSemaphoreCreateMutex();
+  sensorCount = 0;
 
-  tray.temp       = 0.0f;
-  tray.hum        = 0.0f;
-  tray.ts_dht     = 0;
-  tray.valid_dht  = false;
-
-  tray.flow       = 0.0f;
-  tray.ts_flow    = 0;
-  tray.valid_flow = false;
+  tray.temp = 0;
+  tray.hum  = 0;
+  tray.flow = 0;
 }
 
-// --- Producer: DHT11 ---
+// ============================================================
+// REGISTER SENSOR
+// ============================================================
+void registerSensor(const char* name, uint32_t timeout) {
+  if (sensorCount >= MAX_SENSORS) return;
+
+  sensors[sensorCount++] = {
+    name,
+    timeout,
+    0,
+    false,
+    false,
+    false
+  };
+}
+
+// ============================================================
+// MARK SENSOR ALIVE
+// ============================================================
+void markSensorAlive(const char* name) {
+  uint32_t now = millis();
+
+  xSemaphoreTake(trayMutex, portMAX_DELAY);
+  for (int i = 0; i < sensorCount; i++) {
+    if (strcmp(sensors[i].name, name) == 0) {
+      sensors[i].lastSeen = now;
+      sensors[i].active   = true;
+      sensors[i].alive    = true;
+      break;
+    }
+  }
+  xSemaphoreGive(trayMutex);
+}
+
+// ============================================================
+// HEALTH ENGINE (CORE LOGIC)
+// ============================================================
+void updateSensorHealth() {
+  uint32_t now = millis();
+
+  // Collect transitions inside mutex, act on them after release.
+  // This avoids calling xTaskNotifyGive() or enqueueLog() while
+  // holding the mutex, which could cause priority inversion.
+  struct Transition { bool dead; char name[16]; };
+  Transition transitions[MAX_SENSORS];
+  int transCount = 0;
+
+  xSemaphoreTake(trayMutex, portMAX_DELAY);
+
+  for (int i = 0; i < sensorCount; i++) {
+    SensorMeta &s = sensors[i];
+
+    s.prevAlive = s.alive;
+
+    if (!s.active) {
+      s.alive = false;
+    } else {
+      s.alive = (now - s.lastSeen) < s.timeout;
+    }
+
+    if (s.prevAlive != s.alive && transCount < MAX_SENSORS) {
+      transitions[transCount].dead = !s.alive;
+      strncpy(transitions[transCount].name, s.name, 15);
+      transitions[transCount].name[15] = '\0';
+      transCount++;
+    }
+  }
+
+  xSemaphoreGive(trayMutex);
+
+  // Act on transitions outside the mutex
+  bool shouldNotify = false;
+  for (int i = 0; i < transCount; i++) {
+    char msg[64];
+    if (transitions[i].dead) {
+      snprintf(msg, sizeof(msg), "[ALERT] Sensor %s DEAD", transitions[i].name);
+    } else {
+      snprintf(msg, sizeof(msg), "[INFO] Sensor %s RECOVERED", transitions[i].name);
+    }
+    enqueueLog(msg);
+    shouldNotify = true;
+  }
+
+  if (shouldNotify && pushTaskHandle) {
+    xTaskNotifyGive(pushTaskHandle);
+  }
+}
+
+// ============================================================
+// PRODUCERS
+// ============================================================
 void updateDHT(float t, float h) {
+  if (isnan(t) || isnan(h)) return;
+
   xSemaphoreTake(trayMutex, portMAX_DELAY);
-  tray.temp      = t;
-  tray.hum       = h;
-  tray.ts_dht    = millis();
-  tray.valid_dht = true;
+  tray.temp = t;
+  tray.hum  = h;
   xSemaphoreGive(trayMutex);
 
-  // Wake pushTask immediately — no polling needed
+  markSensorAlive("dht");
+
   if (pushTaskHandle) xTaskNotifyGive(pushTaskHandle);
 }
 
-// --- Producer: YF-S201 Flow ---
 void updateFlow(float lpm) {
+  if (isnan(lpm)) return;
+
   xSemaphoreTake(trayMutex, portMAX_DELAY);
-  tray.flow       = lpm;
-  tray.ts_flow    = millis();
-  tray.valid_flow = true;
+  tray.flow = lpm;
   xSemaphoreGive(trayMutex);
 
-  // Wake pushTask immediately — no polling needed
+  markSensorAlive("flow");
+
   if (pushTaskHandle) xTaskNotifyGive(pushTaskHandle);
 }
 
-// --- Viewer: full JSON snapshot ---
-// Safe to call from any task at any time.
+// ============================================================
+// JSON BUILDER
+// ============================================================
 String getSensorJSON() {
-  char buf[128];
+  char buf[256];
+  // MAX_SENSORS * ~20 chars per entry + wrapping = safe at 256
+  char sensorBuf[256] = "{";
+  int  sensorBufLen   = 1;  // tracks current length, avoids unsafe strcat
 
   xSemaphoreTake(trayMutex, portMAX_DELAY);
+
+  for (int i = 0; i < sensorCount; i++) {
+    char entry[32];
+    int wrote = snprintf(entry, sizeof(entry),
+      "\"%s\":%s%s",
+      sensors[i].name,
+      sensors[i].alive ? "true" : "false",
+      (i < sensorCount - 1) ? "," : ""
+    );
+    // Only append if it fits — silently skip if buffer would overflow
+    if (sensorBufLen + wrote < (int)sizeof(sensorBuf) - 2) {
+      memcpy(sensorBuf + sensorBufLen, entry, wrote);
+      sensorBufLen += wrote;
+    }
+  }
+  sensorBuf[sensorBufLen++] = '}';
+  sensorBuf[sensorBufLen]   = '\0';
 
   snprintf(buf, sizeof(buf),
-    "{\"temp\":%.1f,\"hum\":%.1f,\"flow\":%.2f,\"valid\":%s}",
+    "{\"temp\":%.1f,\"hum\":%.1f,\"flow\":%.2f,\"sensors\":%s}",
     tray.temp,
     tray.hum,
     tray.flow,
-    (tray.valid_dht && tray.valid_flow) ? "true" : "false"
+    sensorBuf
   );
 
   xSemaphoreGive(trayMutex);
-
   return String(buf);
 }
 
-#endif // SENSOR_MANAGER_H
+#endif

@@ -138,13 +138,26 @@ void flowTask(void* pv) {
 //  Pushes JSON to all WebSocket clients the moment data lands.
 // ============================================================
 void pushTask(void* pv) {
-  // Register own handle so sensor_manager.h can notify us
-  pushTaskHandle = xTaskGetCurrentTaskHandle();
+  // pushTaskHandle is already set by xTaskCreatePinnedToCore before
+  // this task runs — no need to re-assign it here.
+
+  uint32_t notifyCount;
 
   while (true) {
-    // Block until a producer calls xTaskNotifyGive()
-    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+
+    // 🔥 Wait for notification(s)
+    notifyCount = ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+
+    // 🔍 Debug: detect burst events
+    if (notifyCount > 1) {
+      Serial.printf("[PushTask] Burst: %lu events\n", notifyCount);
+    }
+
+    // 🔥 Push update (only if clients exist)
     pushSensorUpdate();
+
+    // 🧠 Optional: small yield (helps stability under heavy load)
+    taskYIELD();
   }
 }
 
@@ -186,8 +199,14 @@ void setup() {
   // Fixed-size char buffer queue — no heap fragmentation
   logQueue = xQueueCreate(LOG_QUEUE_DEPTH, LOG_MSG_LEN);
 
-  // Tray
+  // Tray + sensor registry — must come before registerSensor()
   initSensorManager();
+
+  // Register only sensors that are physically present and implemented.
+  // Adding a sensor here without a corresponding markSensorAlive() call
+  // will cause it to appear permanently dead in the JSON.
+  registerSensor("dht",  10000);
+  registerSensor("flow",  5000);
 
   // WiFi / OTA / WebSocket / Telnet
   setupWiFiAndOTA();
@@ -197,8 +216,6 @@ void setup() {
   xTaskCreatePinnedToCore(flowTask,       "Flow",   2048, NULL, 2, &flowTaskHandle,       0);
 
   // ── Core 1: network consumers ────────────────────────────
-  // pushTask must register its own handle on entry — NULL here is intentional,
-  // the task sets pushTaskHandle = xTaskGetCurrentTaskHandle() internally.
   xTaskCreatePinnedToCore(pushTask,       "Push",   4096, NULL, 2, &pushTaskHandle,       1);
   xTaskCreatePinnedToCore(loggerTask,     "Logger", 4096, NULL, 1, &loggerTaskHandle,     1);
   xTaskCreatePinnedToCore(sensorViewTask, "View",   4096, NULL, 1, &sensorViewTaskHandle, 1);
@@ -213,11 +230,19 @@ void setup() {
 void loop() {
   handleOTA();
 
+  static unsigned long lastHealthCheck = 0;
+  unsigned long now = millis();
+
+  if (now - lastHealthCheck >= 1000) {
+    updateSensorHealth();
+    lastHealthCheck = now;
+  }
+
   if (shouldReboot) {
     Serial.println("[SYS] Rebooting...");
     delay(500);
     ESP.restart();
   }
 
-  delay(10);
+  vTaskDelay(10 / portTICK_PERIOD_MS);  // better than delay()
 }

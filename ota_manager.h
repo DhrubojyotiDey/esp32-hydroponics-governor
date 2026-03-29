@@ -113,42 +113,112 @@ const char _login_html[] PROGMEM = R"rawliteral(
 //  Connects to ws://<hostname>/ws, parses {temp, hum, flow}.
 // ============================================================
 const char _dash_html[] PROGMEM = R"rawliteral(
-<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<style>
-body{font-family:Arial;text-align:center;background:#111;color:#00ffcc;padding:30px;}
-.box{border:2px solid #00ffcc;padding:20px;border-radius:10px;min-width:280px;display:inline-block;}
-.data{font-size: 26px; margin: 15px 0;}
-.label{color:#888; font-size:14px; display:block;}
-button{margin-top:20px; padding:10px 20px; background:#ff4444; color:white; border:none; border-radius:5px; cursor:pointer;}
-#stat{font-size:10px; color:#444; margin-top:10px;}
-</style>
-</head><body><div class="box">
-<h1>Hydroponics v1</h1>
-<div class="data"><span class="label">TEMPERATURE</span><span id="t">--</span>°C</div>
-<div class="data"><span class="label">HUMIDITY</span><span id="h">--</span>%</div>
-<div class="data"><span class="label">WATER FLOW</span><span id="f">--</span> L/min</div>
-<button onclick="reboot()">RESTART DEVICE</button>
-<div id="stat">Connecting...</div>
-</div>
-<script>
-var gateway = `ws://${window.location.hostname}/ws`;
-var ws;
-function init() {
-  ws = new WebSocket(gateway);
-  ws.onopen    = () => { document.getElementById('stat').innerHTML = 'LIVE'; };
-  ws.onmessage = (e) => {
-    var d = JSON.parse(e.data);
-    document.getElementById('t').innerHTML = d.temp;
-    document.getElementById('h').innerHTML = d.hum;
-    document.getElementById('f').innerHTML = d.flow;
-  };
-  ws.onclose = () => { setTimeout(init, 2000); };
-}
-function reboot() { if(confirm("Restart?")) ws.send("reboot"); }
-window.onload = init;
-</script></body></html>
-)rawliteral";
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body {
+      font-family: Arial;
+      text-align: center;
+      background: #111;
+      color: #00ffcc;
+      padding: 30px;
+    }
+    .box {
+      border: 2px solid #00ffcc;
+      padding: 20px;
+      border-radius: 10px;
+      min-width: 280px;
+      display: inline-block;
+    }
+    .data {
+      font-size: 26px;
+      margin: 15px 0;
+    }
+    .label {
+      color: #888;
+      font-size: 14px;
+      display: block;
+    }
+    button {
+      margin-top: 20px;
+      padding: 10px 20px;
+      background: #ff4444;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    #stat {
+      font-size: 10px;
+      color: #444;
+      margin-top: 10px;
+    }
+  </style>
+</head>
 
+<body>
+  <div class="box">
+    <h1>Hydroponics v1</h1>
+
+    <div class="data">
+      <span class="label">TEMPERATURE</span>
+      <span id="t">--</span>°C
+    </div>
+
+    <div class="data">
+      <span class="label">HUMIDITY</span>
+      <span id="h">--</span>%
+    </div>
+
+    <div class="data">
+      <span class="label">WATER FLOW</span>
+      <span id="f">--</span> L/min
+    </div>
+
+    <button onclick="reboot()">RESTART DEVICE</button>
+    <div id="stat">Connecting...</div>
+  </div>
+
+  <script>
+    var gateway = `ws://${window.location.hostname}/ws`;
+    var ws;
+
+    function init() {
+      ws = new WebSocket(gateway);
+
+      ws.onopen = () => {
+        document.getElementById('stat').innerHTML = 'LIVE';
+      };
+
+      ws.onmessage = (e) => {
+        var d = JSON.parse(e.data);
+        document.getElementById('t').innerHTML = d.temp;
+        document.getElementById('h').innerHTML = d.hum;
+        document.getElementById('f').innerHTML = d.flow;
+      };
+
+      ws.onclose = () => {
+        document.getElementById('stat').innerHTML = 'RECONNECTING...';
+        setTimeout(init, 2000);
+      };
+
+      ws.onerror = () => {
+        ws.close();
+      };
+    }
+
+    function reboot() {
+      if (confirm("Restart?")) ws.send("reboot");
+    }
+
+    window.onload = init;
+  </script>
+</body>
+</html>
+)rawliteral";
 // ============================================================
 //  AP provisioning mode
 // ============================================================
@@ -278,10 +348,40 @@ void handleOTA() {
     dnsServer.processNextRequest();
   } else {
     ArduinoOTA.handle();
+
+    // --- WiFi auto-reconnect (with backoff) ---
+    // Without a timer this fires every loop() call (~every 10ms),
+    // which actively disrupts the reconnection process.
+    static unsigned long lastReconnect = 0;
+    if (WiFi.status() != WL_CONNECTED) {
+      if (millis() - lastReconnect > 30000) {
+        Serial.println("[WiFi] Lost connection, reconnecting...");
+        WiFi.reconnect();
+        lastReconnect = millis();
+      }
+    }
+
+    // --- Cleanup ---
     static unsigned long lastClean = 0;
     if (millis() - lastClean > 5000) {
       ws.cleanupClients();
       lastClean = millis();
+    }
+
+    // --- Heartbeat ---
+    static unsigned long lastPing = 0;
+    if (millis() - lastPing > 10000) {
+      ws.pingAll();
+      lastPing = millis();
+    }
+
+    // --- Fallback push ---
+    static unsigned long lastPush = 0;
+    if (millis() - lastPush > 3000) {
+      if (ws.count() > 0) {
+        ws.textAll(getSensorJSON());
+      }
+      lastPush = millis();
     }
   }
 }

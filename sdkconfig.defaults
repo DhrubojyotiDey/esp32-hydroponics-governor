@@ -29,3 +29,7 @@ CONFIG_NVS_ASSERT_ERROR_CHECK=n
 
 # OTA — no rollback for simplicity; can be enabled later
 CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=n
+
+# Match the flash size detected on the attached board.
+CONFIG_ESPTOOLPY_FLASHSIZE_2MB=y
+CONFIG_ESPTOOLPY_FLASHSIZE="2MB"

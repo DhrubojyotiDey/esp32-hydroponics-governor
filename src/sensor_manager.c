@@ -36,7 +36,6 @@ static SemaphoreHandle_t s_mutex;
 static QueueHandle_t     s_log_queue;
 static volatile bool     s_ap_mode = false;
 
-TaskHandle_t push_task_handle = NULL;
 
 /* ── Helpers ─────────────────────────────────────────────── */
 

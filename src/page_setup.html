@@ -5,95 +5,147 @@
 <title>Hydroponics Setup</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{background:#0a0f0a;color:#a8d5a2;font-family:monospace;
-     display:flex;align-items:center;justify-content:center;
-     min-height:100vh;padding:1rem}
-.card{border:1px solid #2a4a2a;padding:2rem;width:340px;
-      border-radius:4px;background:#0d150d}
-h2{color:#5dbb63;font-size:1.1rem;letter-spacing:.15em;
-   text-transform:uppercase;margin-bottom:1.2rem}
-label{display:block;font-size:.7rem;letter-spacing:.1em;color:#5a7a5a;
-      margin-bottom:.35rem;text-transform:uppercase}
-.fallback{font-size:.61rem;color:#2a4a2a;letter-spacing:.05em;
-          line-height:1.5;margin-bottom:1.1rem;padding:.45rem .6rem;
-          border:1px solid #1a3a1a;border-radius:2px}
-.fallback strong{color:#3a6a3a}
-.net-row{display:flex;gap:.5rem;margin-bottom:.2rem}
+body{
+  background: radial-gradient(circle at top left, #1c2e22 0%, #0a0f0a 100%);
+  color: #e2f0e2; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  display: flex; align-items: center; justify-content: center;
+  min-height: 100vh; padding: 1rem;
+}
+.card{
+  background: rgba(20, 35, 25, 0.4);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 16px; padding: 2.2rem 1.8rem; width: 350px;
+  box-shadow: 0 12px 32px rgba(0,0,0,0.5), inset 1px 1px 2px rgba(255,255,255,0.05);
+}
+h2{
+  color: #8fdca0; font-size: 1.25rem; font-weight: 600;
+  letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 1.5rem;
+  text-align: center;
+  text-shadow: 0 0 8px rgba(143, 220, 160, 0.3);
+}
+label{
+  display: block; font-size: 0.75rem; letter-spacing: 0.1em; color: #8fa892;
+  margin-bottom: 0.4rem; text-transform: uppercase; font-weight: 500;
+}
+.fallback{
+  font-size: 0.7rem; color: #8fa892; line-height: 1.6; margin-bottom: 1.5rem;
+  padding: 0.6rem 0.8rem; background: rgba(0,0,0,0.2);
+  border: 1px solid rgba(255,255,255,0.05); border-radius: 8px;
+  text-align: center;
+}
+.fallback strong{color: #5dbb63}
+.net-row{display:flex;gap:0.6rem;margin-bottom:0.4rem}
 .net-box{position:relative;flex:1;min-width:0}
-.net-sel{background:#111f11;border:1px solid #2a4a2a;color:#a8d5a2;
-         padding:.6rem .8rem;font-family:monospace;font-size:.82rem;
-         border-radius:2px;cursor:pointer;
-         display:flex;justify-content:space-between;align-items:center;
-         user-select:none;-webkit-user-select:none;
-         white-space:nowrap;overflow:hidden}
-.net-sel.open{border-color:#5dbb63;border-bottom-color:#0d150d;
-              border-radius:2px 2px 0 0;z-index:101;position:relative}
-.net-arrow{font-size:.65rem;color:#5a7a5a;margin-left:.4rem;
-           flex-shrink:0;transition:transform .2s}
+.net-sel, input{
+  background: rgba(0,0,0,0.25);
+  border: 1px solid rgba(255,255,255,0.08);
+  color: #e2f0e2 !important; -webkit-text-fill-color: #e2f0e2 !important;
+  padding: 0.8rem 1rem; font-family: inherit; font-size: 0.9rem;
+  border-radius: 8px; cursor: pointer; outline: none; width: 100%;
+  box-shadow: inset 2px 2px 6px rgba(0,0,0,0.4), inset -1px -1px 2px rgba(255,255,255,0.03);
+  transition: all 0.3s ease;
+  display: flex; justify-content: space-between; align-items: center;
+}
+input::placeholder { color: #5a7a5a; -webkit-text-fill-color: #5a7a5a; }
+input:focus, .net-sel.open { border-color: #5dbb63; box-shadow: inset 2px 2px 6px rgba(0,0,0,0.4), 0 0 8px rgba(93,187,99,0.3); }
+.net-arrow{font-size: 0.7rem; color: #5dbb63; transition: transform 0.2s}
 .net-sel.open .net-arrow{transform:rotate(180deg)}
-.net-sel-txt{overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0}
-.net-list{display:none;position:absolute;top:100%;left:0;right:0;
-          z-index:100;background:#0d150d;
-          border:1px solid #5dbb63;border-top:none;
-          border-radius:0 0 2px 2px;
-          max-height:190px;overflow-y:auto;
-          -webkit-overflow-scrolling:touch}
-.net-item{padding:.55rem .8rem;font-family:monospace;font-size:.8rem;
-          color:#a8d5a2;cursor:pointer;
-          border-bottom:1px solid #1a2a1a;
-          white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.net-list{
+  display:none; position:absolute; top:calc(100% + 4px); left:0; right:0;
+  z-index:100;
+  background: rgba(18, 30, 22, 0.95);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255,255,255,0.1); border-radius: 8px;
+  max-height: 180px; overflow-y: auto;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+}
+.net-item{
+  padding: 0.7rem 1rem; font-size: 0.85rem; color: #c0dac0; cursor: pointer;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 .net-item:last-child{border-bottom:none}
-.net-item:active{background:#1a3a1a;color:#5dbb63}
-.net-empty{padding:.55rem .8rem;font-family:monospace;font-size:.74rem;
-           color:#3a5a3a;font-style:italic}
-.pbar-wrap{margin:.35rem 0 .85rem;width:97%;height:4px;
-           background:#1a2a1a;border-radius:2px;overflow:hidden}
-.pbar-fill{height:100%;width:0%;background:#5dbb63;
-           border-radius:2px;transition:width .3s ease}
-@keyframes pbar-scan{0%{width:0%;opacity:1}80%{width:88%;opacity:1}100%{width:88%;opacity:.5}}
-.pbar-fill.scanning{animation:pbar-scan 2.5s ease-out forwards}
-.pbar-fill.done{width:100%;transition:width .2s ease}
-.rfsh{background:#111f11;border:1px solid #2a4a2a;color:#5dbb63;
-      padding:.6rem .75rem;border-radius:2px;cursor:pointer;
-      flex-shrink:0;font-size:1.05rem;line-height:1;
-      transition:background .15s;
-      display:flex;align-items:center;justify-content:center;overflow:hidden}
-.rfsh:active{background:#1a3a1a}
+.net-item:hover, .net-item:active{background: rgba(93,187,99,0.15); color: #8fdca0}
+.net-empty{padding: 0.7rem 1rem; font-size: 0.8rem; color: #5a7a5a; font-style: italic}
+.pbar-wrap{
+  margin: 0.4rem 0 1.2rem; height: 4px;
+  background: rgba(0,0,0,0.4); border-radius: 4px; overflow: hidden;
+  box-shadow: inset 1px 1px 3px rgba(0,0,0,0.5);
+}
+.pbar-fill{
+  height:100%; width:0%;
+  background: linear-gradient(90deg, #4fa355, #8fdca0);
+  border-radius: 4px; transition: width 0.3s ease;
+  box-shadow: 0 0 8px rgba(93,187,99,0.6);
+}
+@keyframes pbar-scan{0%{width:0%;opacity:1}80%{width:88%;opacity:1}100%{width:88%;opacity:0.5}}
+.pbar-fill.scanning{animation: pbar-scan 2.5s ease-out forwards}
+.pbar-fill.done{width:100%; transition: width 0.2s ease}
+.rfsh{
+  background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08);
+  color: #8fdca0; border-radius: 8px; cursor: pointer;
+  padding: 0 0.8rem; flex-shrink: 0; font-size: 1.1rem;
+  transition: all 0.2s; display: flex; align-items: center; justify-content: center;
+  box-shadow: 2px 2px 5px rgba(0,0,0,0.2), inset 1px 1px 2px rgba(255,255,255,0.05);
+}
+.rfsh:active{
+  background: rgba(0,0,0,0.2);
+  box-shadow: inset 2px 2px 4px rgba(0,0,0,0.3);
+  transform: translateY(1px);
+}
 @keyframes rfsh-spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
-#rfsh-icon{display:inline-block;transform-origin:center center;line-height:1}
-#rfsh-icon.spinning{animation:rfsh-spin .7s ease-out}
-#pw-wrap{display:none;margin-top:.6rem}
-.pw-row{display:flex;gap:.5rem;margin-bottom:0}
-input{background:#111f11;border:1px solid #5dbb63;
-      color:#a8d5a2 !important;-webkit-text-fill-color:#a8d5a2 !important;
-      caret-color:#5dbb63;
-      padding:.6rem .8rem;font-family:monospace;font-size:.85rem;
-      border-radius:2px;outline:none;width:100%;
-      -webkit-appearance:none;appearance:none}
-input::placeholder{color:#3a5a3a;-webkit-text-fill-color:#3a5a3a}
-input:focus{border-color:#5dbb63}
-.pw-err{font-size:.65rem;color:#ff6666;min-height:.85rem;
-        margin-top:.25rem;letter-spacing:.05em}
-.btn{width:100%;background:#5dbb63;border:1px solid #5dbb63;
-     color:#0a0f0a;padding:.8rem;font-family:monospace;
-     letter-spacing:.1em;text-transform:uppercase;cursor:pointer;
-     font-size:.82rem;border-radius:2px;margin-top:1rem;
-     box-shadow:0 0 16px rgba(93,187,99,.5);transition:all .25s;
-     display:flex;align-items:center;justify-content:center;gap:.6rem}
-.btn:disabled{background:#0d150d;border-color:#2a4a2a;
-              color:#3a5a3a;box-shadow:none;cursor:not-allowed}
-.btn.complete{flex-direction:column;gap:.4rem;padding:1rem;
-              letter-spacing:.06em;text-transform:none;font-size:.78rem;line-height:1.4}
+#rfsh-icon{display:inline-block; transform-origin:center; line-height:1}
+#rfsh-icon.spinning{animation: rfsh-spin 0.7s ease-out}
+#pw-wrap{display:none; margin-top: 0.8rem}
+.pw-row{display:flex; gap:0.6rem; margin-bottom:0}
+.pw-err{
+  font-size: 0.7rem; color: #ff6b6b; min-height: 1rem;
+  margin-top: 0.3rem; letter-spacing: 0.05em; font-weight: 500;
+}
+.btn{
+  width:100%; color: #fff; padding: 0.9rem; font-family: inherit; font-weight: 600;
+  letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer;
+  font-size: 0.85rem; border-radius: 12px; margin-top: 1.2rem;
+  background: linear-gradient(135deg, #4fa355 0%, #3a7a40 100%);
+  border: 1px solid rgba(255,255,255,0.1);
+  box-shadow: 4px 4px 10px rgba(0,0,0,0.4), -2px -2px 8px rgba(255,255,255,0.03), inset 1px 1px 2px rgba(255,255,255,0.2);
+  transition: all 0.2s ease;
+  display: flex; align-items: center; justify-content: center; gap: 0.6rem;
+}
+.btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #5dbb63 0%, #45924d 100%);
+  box-shadow: 0 0 15px rgba(93,187,99,0.4), 4px 4px 10px rgba(0,0,0,0.4);
+}
+.btn:active:not(:disabled) {
+  box-shadow: inset 3px 3px 6px rgba(0,0,0,0.3), inset -1px -1px 2px rgba(255,255,255,0.1);
+  transform: translateY(2px);
+}
+.btn:disabled{
+  background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.05);
+  color: #666; box-shadow: none; cursor: not-allowed;
+}
+.btn.complete{
+  flex-direction: column; gap: 0.4rem; padding: 1.2rem;
+  letter-spacing: 0.05em; text-transform: none; font-size: 0.85rem; line-height: 1.4;
+  background: linear-gradient(135deg, #1d3324 0%, #0f1c14 100%);
+  border-color: #5dbb63; box-shadow: 0 0 20px rgba(93,187,99,0.2);
+}
 @keyframes spin{to{transform:rotate(360deg)}}
-.sp{width:13px;height:13px;border:2px solid #2a4a2a;
-    border-top-color:#5dbb63;border-radius:50%;
-    animation:spin .75s linear infinite;flex-shrink:0;display:none}
+.sp{
+  width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.2);
+  border-top-color: #fff; border-radius: 50%;
+  animation: spin 0.7s linear infinite; flex-shrink: 0; display: none;
+}
 .sp.on{display:inline-block}
-#instbox{display:none;margin-top:.75rem;padding:.75rem .8rem;
-         border:1px solid #2a4a2a;border-radius:2px;
-         font-size:.68rem;color:#5a7a5a;line-height:1.7;
-         letter-spacing:.05em}
-#instbox strong{color:#5dbb63}
+#instbox{
+  display: none; margin-top: 1rem; padding: 1rem;
+  background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.05);
+  border-radius: 8px; font-size: 0.75rem; color: #8fa892;
+  line-height: 1.6; letter-spacing: 0.05em; text-align: center;
+}
+#instbox strong{color: #8fdca0; font-weight: 500}
 </style>
 </head>
 <body>
@@ -112,7 +164,7 @@ input:focus{border-color:#5dbb63}
       </div>
       <div class="net-list" id="net-list"></div>
     </div>
-    <button class="rfsh" id="rfsh" onclick="doScan()" title="Scan">
+    <button class="rfsh" id="rfsh" type="button" onclick="doScan()" title="Scan">
       <span id="rfsh-icon">&#8635;</span>
     </button>
   </div>
@@ -122,12 +174,12 @@ input:focus{border-color:#5dbb63}
     <label>Password</label>
     <div class="pw-row">
       <input type="password" id="pw" placeholder="Enter password" autocomplete="off">
-      <button class="rfsh" onclick="togglePw()" title="Show/hide">&#128065;</button>
+      <button class="rfsh" type="button" onclick="togglePw()" title="Show/hide">&#128065;</button>
     </div>
     <div class="pw-err" id="pw-err"></div>
   </div>
 
-  <button class="btn" id="cbtn" onclick="onSubmit()" disabled>
+  <button class="btn" id="cbtn" type="button" onclick="onSubmit()" disabled>
     <div class="sp" id="bsp"></div>
     <span id="btxt">SELECT A NETWORK FIRST</span>
   </button>
@@ -231,7 +283,7 @@ function doScan(){
   },500);
 }
 function loadScan(){
-  fetch('/scan').then(function(r){return r.json();})
+  fetch('/scanresults').then(function(r){return r.json();})
   .then(function(data){
     data.sort(function(a,b){return b.rssi-a.rssi;});
     var list=document.getElementById('net-list');
@@ -248,6 +300,9 @@ function loadScan(){
       list.innerHTML=html;
       document.getElementById('net-sel-txt').textContent='-- Select network --';
       setBar('done');
+      _dropOpen=true;
+      document.getElementById('net-list').style.display='block';
+      document.getElementById('net-sel').classList.add('open');
     }
   }).catch(function(){
     document.getElementById('net-sel-txt').textContent='Scan failed \u2014 tap \u21BB';

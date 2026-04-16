@@ -5,59 +5,118 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Hydroponics</title>
   <style>
+    :root {
+      --bg: #1c2e22; --bg-alt: #0a0f0a;
+      --card-bg: rgba(20, 35, 25, 0.45);
+      --text: #e2f0e2; --text-muted: #8fa892;
+      --accent: #5dbb63; --accent-hover: #45924d;
+      --danger: #ff6b6b; --danger-hover: #ff4d4d;
+      --border: rgba(255,255,255,0.08);
+    }
     *{box-sizing:border-box;margin:0;padding:0}
-    body{background:#0a0f0a;color:#a8d5a2;font-family:monospace;
-         min-height:100vh;padding:1.5rem}
-    header{display:flex;align-items:center;justify-content:space-between;
-           margin-bottom:1.5rem;border-bottom:1px solid #1a3a1a;
-           padding-bottom:.75rem}
-    .logo{color:#5dbb63;font-size:1rem;letter-spacing:.2em;text-transform:uppercase}
-    .ws-dot{width:8px;height:8px;border-radius:50%;background:#3a5a3a;
-            transition:background .3s}
-    .ws-dot.live{background:#5dbb63;box-shadow:0 0 6px #5dbb63}
-    .ws-dot.err{background:#ff4444}
-    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
-          gap:1rem;margin-bottom:1.5rem}
-    .card{background:#0d150d;border:1px solid #1a3a1a;border-radius:4px;
-          padding:1.25rem;position:relative;overflow:hidden}
-    .card::before{content:'';position:absolute;top:0;left:0;right:0;
-                  height:2px;background:#5dbb63;opacity:.4}
-    .card-label{font-size:.65rem;letter-spacing:.15em;color:#3a6a3a;
-                text-transform:uppercase;margin-bottom:.5rem}
-    .card-value{font-size:2rem;color:#5dbb63;line-height:1}
-    .card-unit{font-size:.75rem;color:#5a7a5a;margin-top:.3rem;
-               letter-spacing:.08em}
-    .card-status{font-size:.6rem;letter-spacing:.1em;margin-top:.6rem;
-                 text-transform:uppercase}
-    .card-status.alive{color:#5dbb63}
-    .card-status.dead{color:#ff4444}
-    .health-row{display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:1.5rem}
-    .badge{font-size:.65rem;letter-spacing:.12em;text-transform:uppercase;
-           padding:.3rem .6rem;border-radius:2px;border:1px solid #2a4a2a}
-    .badge.alive{border-color:#5dbb63;color:#5dbb63}
-    .badge.dead{border-color:#ff4444;color:#ff4444}
-    .footer{display:flex;align-items:center;gap:1rem;flex-wrap:wrap}
-    .btn{background:#0d150d;border:1px solid #2a4a2a;color:#5dbb63;
-         padding:.55rem 1.1rem;font-family:monospace;font-size:.72rem;
-         letter-spacing:.1em;text-transform:uppercase;cursor:pointer;
-         border-radius:2px;transition:border-color .2s,box-shadow .2s}
-    .btn:hover{border-color:#5dbb63;box-shadow:0 0 8px rgba(93,187,99,.3)}
-    .btn.danger{color:#ff6666;border-color:#3a1a1a}
-    .btn.danger:hover{border-color:#ff4444;box-shadow:0 0 8px rgba(255,68,68,.2)}
-    .stat{font-size:.6rem;color:#2a4a2a;letter-spacing:.08em;margin-left:auto}
+    body{
+      background: radial-gradient(circle at top left, var(--bg) 0%, var(--bg-alt) 100%);
+      color: var(--text); font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      min-height: 100vh; padding: 1.5rem;
+    }
+    header{
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 2rem; padding-bottom: 1rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .logo{
+      color: #8fdca0; font-size: 1.2rem; font-weight: 600;
+      letter-spacing: 0.15em; text-transform: uppercase;
+      text-shadow: 0 0 10px rgba(143,220,160,0.3);
+    }
+    .ws-dot{
+      width: 10px; height: 10px; border-radius: 50%; background: #3a5a3a;
+      transition: all 0.3s ease; box-shadow: inset 1px 1px 3px rgba(0,0,0,0.5);
+    }
+    .ws-dot.live{background: var(--accent); box-shadow: 0 0 10px var(--accent), inset -1px -1px 3px rgba(0,0,0,0.2);}
+    .ws-dot.err{background: var(--danger); box-shadow: 0 0 10px var(--danger);}
+    
+    .grid{
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 1.5rem; margin-bottom: 2rem;
+    }
+    .card{
+      background: var(--card-bg);
+      backdrop-filter: blur(16px) saturate(160%); -webkit-backdrop-filter: blur(16px) saturate(160%);
+      border: 1px solid var(--border); border-radius: 16px;
+      padding: 1.8rem 1.5rem; position: relative; overflow: hidden;
+      box-shadow: 0 12px 32px rgba(0,0,0,0.4), inset 1px 1px 2px rgba(255,255,255,0.05);
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .card:hover { transform: translateY(-2px); box-shadow: 0 16px 40px rgba(0,0,0,0.5), inset 1px 1px 2px rgba(255,255,255,0.08); }
+    .card::before{
+      content:''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+      background: linear-gradient(90deg, #4fa355, #8fdca0); opacity: 0.8;
+    }
+    .card-label{
+      font-size: 0.75rem; letter-spacing: 0.15em; color: var(--text-muted);
+      text-transform: uppercase; margin-bottom: 0.8rem; font-weight: 500;
+    }
+    .card-value{font-size: 2.8rem; color: #fff; line-height: 1; font-weight: 300; text-shadow: 0 4px 12px rgba(0,0,0,0.3);}
+    .card-unit{font-size: 0.8rem; color: var(--text-muted); margin-top: 0.5rem; letter-spacing: 0.05em;}
+    .card-status{font-size: 0.65rem; letter-spacing: 0.1em; margin-top: 1rem; text-transform: uppercase; font-weight: 600;}
+    .card-status.alive{color: var(--accent)}
+    .card-status.dead{color: var(--danger)}
+    
+    .health-row{display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 2rem;}
+    .badge{
+      font-size: 0.65rem; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 600;
+      padding: 0.4rem 0.8rem; border-radius: 8px; border: 1px solid var(--border);
+      background: rgba(0,0,0,0.2); box-shadow: inset 1px 1px 3px rgba(0,0,0,0.3);
+    }
+    .badge.alive{border-color: rgba(93,187,99,0.3); color: var(--accent); background: rgba(93,187,99,0.1);}
+    .badge.dead{border-color: rgba(255,107,107,0.3); color: var(--danger); background: rgba(255,107,107,0.1);}
+    
+    .footer{display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; padding-top: 1rem;}
+    .btn{
+      background: rgba(0,0,0,0.3); border: 1px solid var(--border); color: #fff;
+      padding: 0.7rem 1.2rem; font-family: inherit; font-size: 0.75rem; font-weight: 600;
+      letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer;
+      border-radius: 8px; transition: all 0.2s ease;
+      box-shadow: 4px 4px 10px rgba(0,0,0,0.3), -2px -2px 6px rgba(255,255,255,0.02), inset 1px 1px 2px rgba(255,255,255,0.05);
+    }
+    .btn:hover{background: rgba(255,255,255,0.05); border-color: rgba(93,187,99,0.4); color: var(--accent); box-shadow: 0 0 15px rgba(93,187,99,0.2), 4px 4px 10px rgba(0,0,0,0.3);}
+    .btn:active{box-shadow: inset 2px 2px 5px rgba(0,0,0,0.4); transform: translateY(1px);}
+    .btn.danger:hover{border-color: rgba(255,107,107,0.4); color: var(--danger); box-shadow: 0 0 15px rgba(255,107,107,0.2), 4px 4px 10px rgba(0,0,0,0.3);}
+    .stat{font-size: 0.7rem; color: var(--text-muted); letter-spacing: 0.08em; margin-left: auto; text-transform: uppercase;}
+    
     /* OTA panel */
-    #ota-panel{display:none;margin-top:1rem;padding:1rem;
-               background:#0d150d;border:1px solid #2a4a2a;border-radius:4px}
-    #ota-panel label{font-size:.65rem;color:#5a7a5a;letter-spacing:.1em;
-                     text-transform:uppercase;display:block;margin-bottom:.5rem}
-    #ota-file{background:#111f11;border:1px solid #2a4a2a;color:#a8d5a2;
-              padding:.5rem;font-family:monospace;font-size:.75rem;
-              border-radius:2px;width:100%;margin-bottom:.75rem}
-    #ota-progress{height:4px;background:#1a2a1a;border-radius:2px;
-                  overflow:hidden;display:none;margin-bottom:.5rem}
-    #ota-bar{height:100%;width:0%;background:#5dbb63;
-             border-radius:2px;transition:width .2s}
-    #ota-msg{font-size:.65rem;color:#5a7a5a;letter-spacing:.05em;min-height:.9rem}
+    #ota-panel{
+      display:none; margin-top: 1.5rem; padding: 1.5rem;
+      background: rgba(0,0,0,0.2); backdrop-filter: blur(10px);
+      border: 1px solid var(--border); border-radius: 12px;
+      box-shadow: inset 2px 2px 8px rgba(0,0,0,0.3);
+    }
+    #ota-panel label{
+      font-size: 0.7rem; color: var(--text-muted); letter-spacing: 0.1em;
+      text-transform: uppercase; display: block; margin-bottom: 0.8rem; font-weight: 500;
+    }
+    #ota-file{
+      background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: var(--text);
+      padding: 0.7rem; font-family: inherit; font-size: 0.8rem;
+      border-radius: 8px; width: 100%; margin-bottom: 1rem; outline: none; cursor: pointer;
+    }
+    #ota-file::file-selector-button {
+      background: rgba(0,0,0,0.4); border: 1px solid var(--border); color: #fff;
+      padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; margin-right: 1rem;
+      font-weight: 500; transition: all 0.2s;
+    }
+    #ota-file::file-selector-button:hover { background: rgba(93,187,99,0.2); border-color: var(--accent); }
+    #ota-progress{
+      height: 6px; background: rgba(0,0,0,0.4); border-radius: 4px;
+      overflow: hidden; display: none; margin-bottom: 0.8rem;
+      box-shadow: inset 1px 1px 3px rgba(0,0,0,0.5);
+    }
+    #ota-bar{
+      height: 100%; width: 0%; background: linear-gradient(90deg, #4fa355, #8fdca0);
+      border-radius: 4px; transition: width 0.2s; box-shadow: 0 0 8px rgba(93,187,99,0.5);
+    }
+    #ota-msg{font-size: 0.75rem; color: #8fdca0; letter-spacing: 0.05em; min-height: 1rem;}
   </style>
 </head>
 <body>

@@ -1,6 +1,11 @@
 # ── PlatformIO build outputs ─────────────────────────────────
 .pio/
 
+# ── IDF managed components (auto-downloaded on first build) ──
+# Re-fetched via src/idf_component.yml — do not commit
+managed_components/
+dependencies.lock
+
 # ── ESP-IDF generated config (DO NOT commit — rebuild from sdkconfig.defaults)
 sdkconfig
 
@@ -13,3 +18,4 @@ Thumbs.db
 
 # ── Staging / scratch folder (original flat files) ──────────
 files/
+

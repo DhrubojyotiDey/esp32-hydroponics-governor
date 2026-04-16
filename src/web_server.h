@@ -2,6 +2,7 @@
 #define WEB_SERVER_H
 
 #include "esp_err.h"
+#include <stdbool.h>
 
 /** Start the HTTP server and register all URI + WebSocket handlers. */
 esp_err_t web_server_start(void);

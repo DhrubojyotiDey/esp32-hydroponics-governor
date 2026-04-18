@@ -30,6 +30,14 @@ static char           s_dash_ip[20] = "";
 static int64_t        s_dash_ready_at_us = 0;  /* set on STA connect */
 static bool           s_ap_shutdown_scheduled = false;
 
+static esp_err_t captive_portal_redirect(httpd_req_t *req) {
+    httpd_resp_set_status(req, "302 Found");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    httpd_resp_set_hdr(req, "Location", "http://" AP_IP_ADDR "/");
+    httpd_resp_send(req, NULL, 0);
+    return ESP_OK;
+}
+
 /* ── Async WebSocket send ────────────────────────────────────
  * httpd_ws_send_frame_async() must be called from within the
  * httpd server task. httpd_queue_work() marshals the call.   */
@@ -417,32 +425,24 @@ static esp_err_t ota_handler(httpd_req_t *req) {
 
 /* Android: GET /generate_204 → 302 to portal */
 static esp_err_t captive_android_handler(httpd_req_t *req) {
-    httpd_resp_set_status(req, "302 Found");
-    httpd_resp_set_hdr(req, "Location", "http://" AP_IP_ADDR "/");
-    httpd_resp_send(req, NULL, 0);
-    return ESP_OK;
+    return captive_portal_redirect(req);
 }
 
-/* Windows: GET /connecttest.txt → 200 */
+/* Windows: GET /connecttest.txt -> redirect to keep captive portal open */
 static esp_err_t captive_windows_handler(httpd_req_t *req) {
-    httpd_resp_sendstr(req, "Microsoft Connect Test");
-    return ESP_OK;
+    return captive_portal_redirect(req);
 }
 
-/* Apple: GET /hotspot-detect.html → 200 with Success */
+/* Apple: GET /hotspot-detect.html -> redirect to keep captive portal open */
 static esp_err_t captive_apple_handler(httpd_req_t *req) {
-    httpd_resp_set_type(req, "text/html");
-    httpd_resp_sendstr(req, "<HTML><BODY>Success</BODY></HTML>");
-    return ESP_OK;
+    return captive_portal_redirect(req);
 }
 
 /* ── 404 / catchall → redirect to portal ─────────────────── */
 static esp_err_t not_found_handler(httpd_req_t *req, httpd_err_code_t err) {
     if (wifi_manager_get_state() != WIFI_MGR_CONNECTED) {
         /* In provisioning mode, all unknown URLs → captive portal */
-        httpd_resp_set_status(req, "302 Found");
-        httpd_resp_set_hdr(req, "Location", "http://" AP_IP_ADDR "/");
-        httpd_resp_send(req, NULL, 0);
+        captive_portal_redirect(req);
     } else {
         httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "Not found");
     }
@@ -478,7 +478,10 @@ esp_err_t web_server_start(void) {
         { .uri = "/ota",                .method = HTTP_POST, .handler = ota_handler           },
         { .uri = "/generate_204",       .method = HTTP_GET,  .handler = captive_android_handler},
         { .uri = "/connecttest.txt",    .method = HTTP_GET,  .handler = captive_windows_handler},
+        { .uri = "/fwlink",             .method = HTTP_GET,  .handler = captive_windows_handler},
+        { .uri = "/ncsi.txt",           .method = HTTP_GET,  .handler = captive_windows_handler},
         { .uri = "/hotspot-detect.html",.method = HTTP_GET,  .handler = captive_apple_handler },
+        { .uri = "/success.txt",        .method = HTTP_GET,  .handler = captive_apple_handler },
         { .uri = "/ws",                 .method = HTTP_GET,  .handler = ws_handler,
           .is_websocket = true                                                                 },
     };

@@ -10,6 +10,7 @@ body{
   color: #e2f0e2; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
   display: flex; align-items: center; justify-content: center;
   min-height: 100vh; padding: 1rem;
+  overflow-x: hidden;
 }
 .card{
   background: rgba(20, 35, 25, 0.4);
@@ -18,6 +19,8 @@ body{
   border: 1px solid rgba(255,255,255,0.08);
   border-radius: 16px; padding: 2.2rem 1.8rem; width: 350px;
   box-shadow: 0 12px 32px rgba(0,0,0,0.5), inset 1px 1px 2px rgba(255,255,255,0.05);
+  max-width: 100%;
+  overflow: visible;
 }
 h2{
   color: #8fdca0; font-size: 1.25rem; font-weight: 600;
@@ -58,8 +61,18 @@ input:focus, .net-sel.open { border-color: #5dbb63; box-shadow: inset 2px 2px 6p
   background: rgba(18, 30, 22, 0.95);
   backdrop-filter: blur(12px);
   border: 1px solid rgba(255,255,255,0.1); border-radius: 8px;
-  max-height: 180px; overflow-y: auto;
+  max-height: min(46vh, 260px); overflow-y: auto; overflow-x: hidden;
+  -webkit-overflow-scrolling: touch; overscroll-behavior: contain; touch-action: pan-y;
   box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+  scrollbar-width: thin; scrollbar-color: rgba(143,220,160,0.45) rgba(0,0,0,0.18);
+}
+.net-list::-webkit-scrollbar{width:10px}
+.net-list::-webkit-scrollbar-track{
+  background: rgba(0,0,0,0.18); border-radius: 10px;
+}
+.net-list::-webkit-scrollbar-thumb{
+  background: linear-gradient(180deg, rgba(143,220,160,0.75), rgba(79,163,85,0.75));
+  border-radius: 10px; border: 2px solid rgba(18, 30, 22, 0.95);
 }
 .net-item{
   padding: 0.7rem 1rem; font-size: 0.85rem; color: #c0dac0; cursor: pointer;
@@ -69,6 +82,11 @@ input:focus, .net-sel.open { border-color: #5dbb63; box-shadow: inset 2px 2px 6p
 .net-item:last-child{border-bottom:none}
 .net-item:hover, .net-item:active{background: rgba(93,187,99,0.15); color: #8fdca0}
 .net-empty{padding: 0.7rem 1rem; font-size: 0.8rem; color: #5a7a5a; font-style: italic}
+@media (max-width: 480px){
+  body{align-items:flex-start}
+  .card{width:100%; padding: 1.5rem 1rem}
+  .net-list{max-height:min(52vh, 320px)}
+}
 .pbar-wrap{
   margin: 0.4rem 0 1.2rem; height: 4px;
   background: rgba(0,0,0,0.4); border-radius: 4px; overflow: hidden;
@@ -251,6 +269,7 @@ function selectNet(el){
   _selSSID=el.getAttribute('data-ssid');
   _selOpen=el.getAttribute('data-open')==='true';
   document.getElementById('net-sel-txt').textContent=el.textContent.trim();
+  console.log('wifi selected:',_selSSID,'open:',_selOpen);
   closeDropdown();
   afterSelect();
 }
@@ -317,6 +336,7 @@ function onSubmit(){
   if(!_selOpen&&pass.length===0){errEl.textContent='Password required';document.getElementById('pw').focus();return;}
   if(!_selOpen&&pass.length<8){errEl.textContent='Min 8 characters';document.getElementById('pw').focus();return;}
   clearInterval(scanStatusTmr);
+  console.log('connect button pressed for:',_selSSID);
   setBtn('Connecting\u2026',true,true);
   fetch('/save',{
     method:'POST',

@@ -12,9 +12,11 @@
 #include "esp_netif.h"
 #include "esp_log.h"
 #include "esp_timer.h"
+#include "esp_random.h"
 #include "nvs_flash.h"
 #include "nvs.h"
 #include "mdns.h"
+#include "esp_mac.h"
 
 static const char *TAG = "WIFI";
 
@@ -40,6 +42,7 @@ static char                       s_pending_ssid[33] = "";
 static char                       s_pending_pass[65] = "";
 static wifi_ap_record_t           s_scan_records[20];
 static uint16_t                   s_scan_record_count = 0;
+static int                        s_retry_count = 0;
 
 static void clear_pending_credentials(void) {
     s_pending_ssid[0] = '\0';
@@ -212,8 +215,16 @@ static void wifi_event_handler(void *arg, esp_event_base_t base,
                      ev->reason, (long long)elapsed_ms);
 
             if (s_state == WIFI_MGR_CONNECTING) {
+                if (s_retry_count < 1) {
+                    s_retry_count++;
+                    ESP_LOGI(TAG, "Connection failed (reason %d) - triggering retry 1/1...", ev->reason);
+                    esp_wifi_connect();
+                    break; /* skip failure logic for now */
+                }
+
                 bool auth_fail =
                     (ev->reason == WIFI_REASON_AUTH_FAIL)              ||
+                    (ev->reason == WIFI_REASON_AUTH_EXPIRE)            ||
                     (ev->reason == WIFI_REASON_HANDSHAKE_TIMEOUT)      ||
                     (ev->reason == WIFI_REASON_4WAY_HANDSHAKE_TIMEOUT) ||
                     (ev->reason == WIFI_REASON_MIC_FAILURE);
@@ -222,10 +233,13 @@ static void wifi_event_handler(void *arg, esp_event_base_t base,
                 xEventGroupSetBits(s_eg, BIT_STA_FAILED);
 
                 if (auth_fail) {
-                    ESP_LOGW(TAG, "Authentication failed for '%s' - possible typo or wrong password",
+                    ESP_LOGW(TAG, "Authentication failed definitively for '%s' - possible typo or wrong password",
                              s_target_ssid[0] ? s_target_ssid : "<unknown>");
                     enqueue_log("[ALERT] Authentication failed - possible typo or wrong password");
                     clear_pending_credentials();
+                    
+                    /* Only clear NVS if we are certain it's a real credential error and retries are exhausted */
+                    nvs_clear(); 
                 } else if (ev->reason == WIFI_REASON_NO_AP_FOUND) {
                     ESP_LOGW(TAG, "Connection failed for '%s' - access point not found",
                              s_target_ssid[0] ? s_target_ssid : "<unknown>");
@@ -250,8 +264,10 @@ static void wifi_event_handler(void *arg, esp_event_base_t base,
         }
 
         case WIFI_EVENT_SCAN_DONE:
-            s_scanning = false;
-            update_scan_cache();
+            if (s_scanning) {
+                s_scanning = false;
+                update_scan_cache();
+            }
             break;
 
         default:
@@ -305,18 +321,42 @@ static void start_ap(void) {
         s_sta_netif_done = true;
     }
 
+    /* Start purely in STA mode to perform an invisible pre-scan */
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+    ESP_ERROR_CHECK(esp_wifi_start());
+
+    ESP_LOGI(TAG, "Pre-scanning networks before launching AP to prevent portal drop...");
+    wifi_scan_config_t sc = {
+        .show_hidden = false,
+        .scan_type   = WIFI_SCAN_TYPE_ACTIVE
+    };
+    esp_wifi_scan_start(&sc, true); /* Blocking */
+
+    update_scan_cache();
+    ESP_LOGI(TAG, "Pre-scan complete, found %u APs. Activating AP.", (unsigned)s_scan_record_count);
+
+    uint8_t best_chan = 6;
+    int8_t best_rssi = -128;
+    for (int i = 0; i < s_scan_record_count; i++) {
+        if (s_scan_records[i].rssi > best_rssi) {
+            best_rssi = s_scan_records[i].rssi;
+            best_chan = s_scan_records[i].primary;
+        }
+    }
+    ESP_LOGI(TAG, "Dynamic Boot: Choosing Channel %d (matches strongest AP signal)", best_chan);
+
+    /* NOW switch to APSTA and unleash the AP on the ideal channel to dodge CSA conflicts natively */
     wifi_config_t ap_cfg = {
         .ap = {
             .ssid           = AP_SSID,
             .ssid_len       = sizeof(AP_SSID) - 1,
-            .channel        = 6,
+            .channel        = best_chan,
             .authmode       = WIFI_AUTH_OPEN,
             .max_connection = 4,
         }
     };
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &ap_cfg));
-    ESP_ERROR_CHECK(esp_wifi_start());
 
     s_ap_active = true;
     s_state     = WIFI_MGR_AP_ONLY;
@@ -341,42 +381,53 @@ static void connect_sta(const char *ssid, const char *pass, bool open) {
     s_pending_ssid[sizeof(s_pending_ssid) - 1] = '\0';
     strncpy(s_pending_pass, pass, sizeof(s_pending_pass) - 1);
     s_pending_pass[sizeof(s_pending_pass) - 1] = '\0';
-
     if (!open) {
-        sta.sta.threshold.authmode = WIFI_AUTH_WPA_PSK;
+        sta.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
     }
     /* For open nets, threshold stays at WIFI_AUTH_OPEN (== 0, zero-init) */
+    
     sta.sta.pmf_cfg.capable = true;
     sta.sta.pmf_cfg.required = false;
     if (scan_ap) {
-        sta.sta.channel = scan_ap->primary;
-        sta.sta.bssid_set = 1;
-        memcpy(sta.sta.bssid, scan_ap->bssid, sizeof(sta.sta.bssid));
+        ESP_LOGI(TAG, "Target AP found in scan cache: BSSID=" MACSTR " Channel=%d RSSI=%d",
+                 MAC2STR(scan_ap->bssid), scan_ap->primary, scan_ap->rssi);
+        /* 
+         * REMOVED: sta.sta.channel = scan_ap->primary;
+         * Locking to the scanned channel causes connection failure (reason 2/AUTH_EXPIRE) 
+         * if the AP hops channels or if the scan is slightly stale. 
+         * Let the ESP32 driver find the AP natively.
+         */
+    } else {
+        ESP_LOGW(TAG, "Target AP '%s' NOT in scan cache - driver will perform full scan", s_target_ssid);
     }
+
+    /* Log first 4 bytes of password in HEX to rule out hidden encoding issues */
+    if (strlen(pass) >= 4) {
+        ESP_LOGI(TAG, "Password Check -> HEX: %02x %02x %02x %02x", 
+                 (unsigned char)pass[0], (unsigned char)pass[1], (unsigned char)pass[2], (unsigned char)pass[3]);
+    }
+
+    s_retry_count = 0;
+    ESP_LOGI(TAG, "Attempting APSTA connection to '%s' (%s)...",
+             s_target_ssid, open ? "open" : "secured");
+    ESP_LOGI(TAG, "Config Audit -> SSID: '%s' | PASS: '%s' | AuthMode: %d",
+             sta.sta.ssid, sta.sta.password, sta.sta.threshold.authmode);
+
+    /* Reset any partial association from a previous failed attempt before entering connecting state. */
+    esp_wifi_disconnect();
+    
+    /* Strict hardware digestion delay. 
+     * esp_wifi_disconnect() acts asynchronously. If esp_wifi_connect() fires 
+     * too fast, the radio driver can collide states and fail in (0xb0) init->auth forever! */
+    vTaskDelay(pdMS_TO_TICKS(150));
 
     s_state         = WIFI_MGR_CONNECTING;
     s_conn_start_us = esp_timer_get_time();
     xEventGroupClearBits(s_eg, BIT_STA_CONNECTED | BIT_STA_FAILED);
 
-    if (scan_ap) {
-        ESP_LOGI(TAG, "Attempting connection to '%s' (%s) via channel %u bssid %02x:%02x:%02x:%02x:%02x:%02x",
-                 s_target_ssid, open ? "open" : "secured", scan_ap->primary,
-                 scan_ap->bssid[0], scan_ap->bssid[1], scan_ap->bssid[2],
-                 scan_ap->bssid[3], scan_ap->bssid[4], scan_ap->bssid[5]);
-    } else {
-        ESP_LOGI(TAG, "Attempting connection to '%s' (%s) without scan lock",
-                 s_target_ssid, open ? "open" : "secured");
-    }
-
-    /* Reset any partial association from a previous failed attempt. */
-    esp_wifi_disconnect();
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &sta));
 
-    /*
-     * In APSTA mode the WiFi driver is already started by start_ap(),
-     * so WIFI_EVENT_STA_START will NOT fire again - we call
-     * esp_wifi_connect() directly here instead.
-     */
+    /* We are pure STA or APSTA and ready to launch manual connect */
     esp_err_t ret = esp_wifi_connect();
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "esp_wifi_connect() failed for '%s': %s",
@@ -431,6 +482,7 @@ esp_err_t wifi_manager_start(void) {
     ESP_LOGI(TAG, "Credentials found - connecting to '%s'", ssid);
     strncpy(s_target_ssid, ssid, sizeof(s_target_ssid) - 1);
     s_target_ssid[sizeof(s_target_ssid) - 1] = '\0';
+    s_retry_count = 0;
 
     if (!s_sta_netif_done) {
         esp_netif_create_default_wifi_sta();
@@ -443,13 +495,17 @@ esp_err_t wifi_manager_start(void) {
     strncpy((char *)sta.sta.ssid, ssid, sizeof(sta.sta.ssid) - 1);
     strncpy((char *)sta.sta.password, pass, sizeof(sta.sta.password) - 1);
     /* Direct STA path: assume secured. If open, user re-provisions. */
-    sta.sta.threshold.authmode = WIFI_AUTH_WPA_PSK;
+    sta.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
+    sta.sta.pmf_cfg.capable = true;
+    sta.sta.pmf_cfg.required = false;
 
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &sta));
 
     s_state         = WIFI_MGR_CONNECTING;
     s_conn_start_us = esp_timer_get_time();
     ESP_LOGI(TAG, "Attempting direct STA connection to '%s'", s_target_ssid);
+    ESP_LOGI(TAG, "Config Audit -> SSID: '%s' | PASS: '%s' | AuthMode: %d",
+             sta.sta.ssid, sta.sta.password, sta.sta.threshold.authmode);
 
     ESP_ERROR_CHECK(esp_wifi_start());   /* fires STA_START -> connect */
 
@@ -498,8 +554,12 @@ esp_err_t wifi_manager_reconnect(void) {
     strncpy((char *)sta.sta.ssid, ssid, sizeof(sta.sta.ssid) - 1);
     strncpy((char *)sta.sta.password, pass, sizeof(sta.sta.password) - 1);
     sta.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
+    sta.sta.pmf_cfg.capable = true;
+    sta.sta.pmf_cfg.required = false;
+
     strncpy(s_target_ssid, ssid, sizeof(s_target_ssid) - 1);
     s_target_ssid[sizeof(s_target_ssid) - 1] = '\0';
+    s_retry_count = 0;
 
     s_state         = WIFI_MGR_CONNECTING;
     s_conn_start_us = esp_timer_get_time();
@@ -530,11 +590,11 @@ esp_err_t wifi_manager_scan_start(void) {
         .scan_type   = WIFI_SCAN_TYPE_ACTIVE,
         .scan_time   = {
             .active  = {
-                .min = 20, /* Fast hop so mobile OS doesn't drop captive portal ping */
-                .max = 30
+                .min = 120, /* Default ESP-IDF times needed to catch beacons/probes */
+                .max = 120
             }
         },
-        .home_chan_dwell_time = 30 /* Return to AP channel for 30ms between scans to keep clients alive */
+        .home_chan_dwell_time = 80 /* Jump back to AP channel for 80ms between each scan frame to keep the phone connected */
     };
     s_scanning = true;
     s_last_scan_err = ESP_OK;

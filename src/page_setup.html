@@ -427,7 +427,10 @@ function showComplete(ip,local){
   btn.onclick=function(){
     doCopy(local);
     tx.textContent='Copied! \u2714';
-    setTimeout(function(){tx.textContent='Copy  '+local;},2000);
+    setTimeout(function(){
+      tx.textContent='Closing portal...';
+      fetch('/reboot', {method: 'POST'}).catch(function(){});
+    }, 500);
   };
   var ib=document.getElementById('instbox');
   ib.innerHTML='Connect to <strong>'+enc(_selSSID)+'</strong>'
@@ -442,7 +445,7 @@ function doCopy(txt){
        document.body.appendChild(t);t.select();
        document.execCommand('copy');document.body.removeChild(t);}
 }
-doScan();
+loadScan(); /* Use the ESP32's pre-boot scan to avoid dropping the AP! */
 startKeepAlive();
 </script>
 </body></html>

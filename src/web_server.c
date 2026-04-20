@@ -103,6 +103,12 @@ static void delayed_ap_shutdown_task(void *arg) {
     vTaskDelete(NULL);
 }
 
+static void delayed_reboot_task(void *arg) {
+    vTaskDelay(pdMS_TO_TICKS(1000));
+    ESP_LOGW(TAG, "Executing user-invoked soft restart to drop AP and enter pure STA mode!");
+    esp_restart();
+}
+
 /* ── GET / — captive portal or dashboard ─────────────────── */
 static esp_err_t root_handler(httpd_req_t *req) {
     httpd_resp_set_type(req, "text/html");
@@ -127,6 +133,14 @@ static esp_err_t root_handler(httpd_req_t *req) {
         const size_t setup_len = page_setup_html_len;
         httpd_resp_send(req, (const char *)page_setup_html_start, setup_len);
     }
+    return ESP_OK;
+}
+
+static esp_err_t reboot_handler(httpd_req_t *req) {
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, "{\"status\":\"rebooting\"}");
+    ESP_LOGI(TAG, "Reboot explicitly requested by Captive Portal UI. Restarting in 1s...");
+    xTaskCreate(delayed_reboot_task, "delayed_reboot", 2048, NULL, 5, NULL);
     return ESP_OK;
 }
 
@@ -281,8 +295,8 @@ static esp_err_t save_handler(httpd_req_t *req) {
         return ESP_OK;
     }
 
-    ESP_LOGI(TAG, "/save — SSID='%s' pass_len=%d open=%d",
-             ssid, (int)strlen(pass), (int)open);
+    ESP_LOGI(TAG, "/save — SSID='%s' | user's given password is %s | open=%d",
+             ssid, pass, (int)open);
 
     esp_err_t ret = wifi_manager_connect(ssid, pass, open);
     httpd_resp_set_type(req, "application/json");
@@ -508,6 +522,7 @@ esp_err_t web_server_start(void) {
         { .uri = "/save",               .method = HTTP_POST, .handler = save_handler          },
         { .uri = "/status",             .method = HTTP_GET,  .handler = status_handler        },
         { .uri = "/ap_shutdown",        .method = HTTP_POST, .handler = ap_shutdown_handler   },
+        { .uri = "/reboot",             .method = HTTP_POST, .handler = reboot_handler        },
         { .uri = "/dashready",          .method = HTTP_GET,  .handler = dashready_handler     },
         { .uri = "/data",               .method = HTTP_GET,  .handler = data_handler          },
         { .uri = "/ota",                .method = HTTP_POST, .handler = ota_handler           },

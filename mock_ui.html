@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Hydroponics Dashboard</title>
+  <title>Mock Hydroponics Dashboard (Interactive UI Preview)</title>
   <style>
     :root {
       --bg: #e0e5ec;
@@ -142,7 +142,7 @@
     .btn.danger { color: var(--btn-danger); }
     .btn.danger:active { color: #f87171; }
 
-    /* Modal / OTA Update Panel (Glassmorphism + Neumorphism) */
+    /* Modal / OTA Update Panel */
     .modal-overlay {
       position: fixed; top: 0; left: 0; width: 100%; height: 100%;
       background: rgba(224, 229, 236, 0.5); 
@@ -169,17 +169,23 @@
     .close-btn:hover { color: var(--text-main); }
     
     .btn-block { width: 100%; display: block; }
+    
+    #demo-banner {
+      background: #10b981; color: white; text-align: center; font-weight: 700; padding: 0.4rem;
+      letter-spacing: 0.05em; font-size: 0.8rem; border-radius: 4px; margin-bottom: 2rem;
+    }
   </style>
 </head>
-<body data-theme="light">
+<body data-theme="dark">
   <div class="container">
+    <div id="demo-banner">LIVESTREAM OF MOCK TELEMETRY</div>
     <nav>
       <div class="brand">Hydroponics</div>
       <div class="ctrls">
         <div class="theme-toggle" onclick="toggleTheme()" title="Toggle Light/Dark Theme">
           <div class="toggle-knob"></div>
         </div>
-        <div class="ws-dot" id="wsdot" title="Live Connection"></div>
+        <div class="ws-dot live" id="wsdot" title="Live Connection"></div>
       </div>
     </nav>
 
@@ -211,8 +217,8 @@
 
       <!-- Health Bar Track -->
       <div class="neu-in health-track">
-        <div class="sensor-node">DHT <div class="node-dot" id="st-dht"></div></div>
-        <div class="sensor-node">FLOW <div class="node-dot" id="st-flow"></div></div>
+        <div class="sensor-node">DHT <div class="node-dot ok" id="st-dht"></div></div>
+        <div class="sensor-node">FLOW <div class="node-dot ok" id="st-flow"></div></div>
       </div>
 
       <!-- Actions -->
@@ -237,7 +243,7 @@
       
       <div id="ota-msg"></div>
       
-      <div class="neu-out btn btn-block" onclick="doOTA()">Flash Device</div>
+      <div class="neu-out btn btn-block" onclick="doOTA()">Mock Flash Device</div>
     </div>
   </div>
 
@@ -247,7 +253,6 @@
     if (savedTheme) {
       document.body.setAttribute('data-theme', savedTheme);
     } else {
-      // Auto-detect system preference
       if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
         document.body.setAttribute('data-theme', 'dark');
       }
@@ -264,78 +269,55 @@
     function openOTA() { document.getElementById('ota-modal').classList.add('open'); }
     function closeOTA() { document.getElementById('ota-modal').classList.remove('open'); }
 
-    // WebSocket Logic
-    var ws, wsDot = document.getElementById('wsdot');
-    function initWS() {
-      ws = new WebSocket('ws://'+window.location.hostname+'/ws');
-      ws.onopen = function(){ wsDot.className='ws-dot live'; };
-      
-      ws.onmessage = function(e){
-        try{
-          var d = JSON.parse(e.data);
-          
-          if(d.temp !== undefined) document.getElementById('val-temp').textContent = d.temp.toFixed(1);
-          if(d.hum !== undefined)  document.getElementById('val-hum').textContent = d.hum.toFixed(1);
-          if(d.flow !== undefined) document.getElementById('val-flow').textContent = d.flow.toFixed(2);
-          
-          if(d.sensors){
-            document.getElementById('st-dht').className = 'node-dot ' + (d.sensors.dht ? 'ok' : '');
-            document.getElementById('st-flow').className = 'node-dot ' + (d.sensors.flow ? 'ok' : '');
-          }
-        } catch(x){}
-      };
-      
-      ws.onclose = function(){ 
-        wsDot.className='ws-dot'; 
-        setTimeout(initWS, 2500); 
-      };
+    // Mock Backend Telemetry Injection
+    function updateMockData() {
+        const temp = (28.5 + (Math.random() * 2.0 - 1.0)).toFixed(1);
+        const hum = (58.0 + (Math.random() * 4.0 - 2.0)).toFixed(1);
+        const flow = (0.24 + (Math.random() * 0.05 - 0.02)).toFixed(2);
+        
+        document.getElementById('val-temp').textContent = temp;
+        document.getElementById('val-hum').textContent = hum;
+        document.getElementById('val-flow').textContent = flow;
     }
+    
+    // Inject Mock Data every 1.5 seconds simulating Websocket Stream!
+    setInterval(updateMockData, 1500);
+    updateMockData();
 
     function doReboot() {
-      if(confirm('Commence physical hardware reboot?')) {
-        try { ws.send('reboot'); } catch(e){}
-        setTimeout(function(){ location.reload(); }, 3500);
+      if(confirm('Mock: Rebooting device physically?')) {
+        alert("Board would now reboot!");
       }
     }
 
     function doOTA() {
-      var f = document.getElementById('ota-file').files[0];
       var msg = document.getElementById('ota-msg');
       var bar = document.getElementById('ota-bar');
       var prog = document.getElementById('ota-progress');
       
-      if(!f) { msg.textContent='Please select a valid .bin file.'; return; }
-      
       prog.style.display='block'; 
       bar.style.width='0%'; 
-      msg.textContent='Awaiting upload...';
+      msg.textContent='Mock Flash Started...';
       
-      var xhr = new XMLHttpRequest();
-      xhr.open('POST','/ota');
-      
-      xhr.upload.onprogress = function(e) {
-        if(e.lengthComputable) {
-          var pct = Math.round((e.loaded / e.total) * 100);
+      let pct = 0;
+      let ivi = setInterval(function(){
+          pct += 5;
           bar.style.width = pct + '%';
           msg.textContent = 'Uploading: ' + pct + '%';
-        }
-      };
-      
-      xhr.onload = function() {
-        if(xhr.status === 200) { 
-          bar.style.width='100%'; 
-          msg.textContent='Success! Flashing memory...'; 
-          setTimeout(function(){ location.reload(); }, 5000); 
-        } else {
-          msg.textContent = 'Hardware Error (HTTP ' + xhr.status + ')';
-        }
-      };
-      
-      xhr.onerror = function() { msg.textContent = 'Network communication failed.'; };
-      xhr.send(f);
+          
+          if(pct >= 100) {
+              clearInterval(ivi);
+              msg.textContent='Flashing memory...'; 
+              setTimeout(function(){ 
+                   alert("OTA Flash Succeeded!"); 
+                   closeOTA();
+                   prog.style.display='none'; 
+                   bar.style.width='0%'; 
+                   msg.textContent='';
+              }, 1500);
+          }
+      }, 100);
     }
-
-    window.onload = initWS;
   </script>
 </body>
 </html>
